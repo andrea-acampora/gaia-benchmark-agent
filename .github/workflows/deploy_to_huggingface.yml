@@ -16,4 +16,4 @@ jobs:
       - name: Push to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push -f https://andrea-acampora:$HF_TOKEN@huggingface.co/spaces/andrea-acampora/gaia-agent-benchmark main
+        run: git push -f https://andrea-acampora:$HF_TOKEN@huggingface.co/spaces/andrea-acampora/gaia-benchmark-agent main

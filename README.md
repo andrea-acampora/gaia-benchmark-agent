@@ -1,5 +1,5 @@
 ---
-title: Gaia Benchmark Agent
+title: GAIA Benchmark Agent
 emoji: 🕵🏻‍♂️
 colorFrom: indigo
 colorTo: indigo

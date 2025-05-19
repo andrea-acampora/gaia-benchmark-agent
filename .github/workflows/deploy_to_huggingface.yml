@@ -1,0 +1,19 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  push-to-hugging-face:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true
+      - name: Push to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: git push -f https://andrea-acampora:$HF_TOKEN@huggingface.co/spaces/andrea-acampora/gaia-agent-benchmark main

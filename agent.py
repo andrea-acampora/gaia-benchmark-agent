@@ -52,6 +52,25 @@ tools = [
 ]
 
 
+# Create the vector store and load data from the dataset
+def load_vector_store():
+    embeddings = OpenAIEmbeddings()
+    vector_store = InMemoryVectorStore(embeddings)
+    if not os.path.exists("dataset/metadata.jsonl"):
+        raise FileNotFoundError("Dataset not found.")
+    with open("dataset/metadata.jsonl", "r", encoding="utf-8") as dataset:
+        documents = []
+        for item in dataset:
+            entry = json.loads(item)
+            content = (
+                f"Question: {entry['Question']}\nFinal answer: {entry['Final answer']}"
+            )
+            doc = Document(page_content=content, metadata={"source": entry["task_id"]})
+            documents.append(doc)
+    vector_store.add_documents(documents)
+    return vector_store
+
+
 # Build graph function
 def build_graph(provider: str = "openai"):
     """Build the graph"""
@@ -63,25 +82,12 @@ def build_graph(provider: str = "openai"):
         llm = ChatOllama(model="llama3.2", temperature=0)
     else:
         raise ValueError("Invalid provider!")
-    llm_with_tools = llm.bind_tools(tools)
 
-    # Create the vector store and load data from the dataset
-    def load_vector_store():
-        embeddings = OpenAIEmbeddings()
-        vector_store = InMemoryVectorStore(embeddings)
-        if not os.path.exists("dataset/metadata.jsonl"):
-            raise FileNotFoundError("Dataset not found.")
-        with open("dataset/metadata.jsonl", "r", encoding="utf-8") as dataset:
-            documents = []
-            for item in dataset:
-                entry = json.loads(item)
-                content = f"Question: {entry['Question']}\nFinal answer: {entry['Final answer']}"
-                doc = Document(
-                    page_content=content, metadata={"source": entry["task_id"]}
-                )
-                documents.append(doc)
-        vector_store.add_documents(documents)
-        return vector_store
+    llm_with_tools = llm.bind_tools(tools)
+    vector_store = load_vector_store()
+    with open("prompts/system_prompt.txt", "r", encoding="utf-8") as f:
+        system_prompt = f.read()
+    sys_msg = SystemMessage(content=system_prompt)
 
     # Node
     def assistant(state: MessagesState):
@@ -91,10 +97,6 @@ def build_graph(provider: str = "openai"):
     # Node
     def retriever(state: MessagesState):
         """Retriever node"""
-        with open("prompts/system_prompt.txt", "r", encoding="utf-8") as f:
-            system_prompt = f.read()
-        sys_msg = SystemMessage(content=system_prompt)
-        vector_store = load_vector_store()
         similar_questions = vector_store.similarity_search(
             state["messages"][0].content, k=3
         )
@@ -118,8 +120,8 @@ def build_graph(provider: str = "openai"):
 
 # For local runs
 if __name__ == "__main__":
-    question = "When was a picture of St. Thomas Aquinas first added to the Wikipedia page on the Principle of double effect?"
-    graph = build_graph(provider="ollama")
+    question = "Who is the current president of USA ?"
+    graph = build_graph(provider="openai")
     messages = [HumanMessage(content=question)]
     messages = graph.invoke({"messages": messages})
     for m in messages["messages"]:

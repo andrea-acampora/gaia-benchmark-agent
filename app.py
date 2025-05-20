@@ -1,5 +1,6 @@
 import os
 import gradio as gr
+import re
 import requests
 import pandas as pd
 from agent import build_graph
@@ -23,7 +24,16 @@ class BasicAgent:
         messages = [HumanMessage(content=question)]
         messages = self.graph.invoke({"messages": messages})
         answer = messages["messages"][-1].content
-        return answer[14:]  # Removing "Final Answer:" for GAIA benchmark submission
+        # Use regex to extract the answer after FINAL ANSWER:
+        match = re.search(r"FINAL ANSWER:\s*(.+)", answer, re.IGNORECASE)
+        if match:
+            final_answer = match.group(1).strip()
+            # Optionally: strip trailing explanations (e.g., if comma-separated and extra stuff is appended)
+            final_answer = (
+                final_answer.split("\n")[0].split(",")[0] if final_answer else ""
+            )
+            return final_answer
+        return "AGENT FORMAT ERROR"
 
 
 def run_and_submit_all(profile: gr.OAuthProfile | None):

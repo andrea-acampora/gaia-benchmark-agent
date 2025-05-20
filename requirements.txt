@@ -11,9 +11,9 @@ langchain-tavily
 langchain-chroma
 langgraph
 huggingface_hub
-supabase
 arxiv
 pymupdf
 wikipedia
 pgvector
 python-dotenv
+pinecone-client

@@ -1,18 +1,19 @@
 """LangGraph Agent"""
 
+import os
+import json
+import getpass
 from dotenv import load_dotenv
+
 from langgraph.graph import START, StateGraph, MessagesState
-from langgraph.prebuilt import tools_condition
-from langgraph.prebuilt import ToolNode
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langgraph.prebuilt import tools_condition, ToolNode
+
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_core.documents import Document
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_ollama import ChatOllama
 
-import os
-import getpass
-import json
 from tools.math.multiply import multiply
 from tools.math.add import add
 from tools.math.subtract import subtract
@@ -31,9 +32,13 @@ from tools.file.analyze_image import analyze_image
 from tools.file.download_file_from_url import download_file_from_url
 from tools.file.save_content_to_file import save_content_to_file
 
+# --- Load environment variables ---
 load_dotenv()
 
-tools = [
+# --- Constants ---
+DATASET_PATH = "dataset/metadata.jsonl"
+SYSTEM_PROMPT_PATH = "prompts/system_prompt.txt"
+TOOLS = [
     add,
     subtract,
     multiply,
@@ -52,16 +57,16 @@ tools = [
 ]
 
 
-# Create the vector store and load data from the dataset
-def load_vector_store():
+def load_vector_store() -> InMemoryVectorStore:
+    """Load vector store with dataset examples."""
+    if not os.path.exists(DATASET_PATH):
+        raise FileNotFoundError(f"Dataset not found at {DATASET_PATH}.")
     embeddings = OpenAIEmbeddings()
     vector_store = InMemoryVectorStore(embeddings)
-    if not os.path.exists("dataset/metadata.jsonl"):
-        raise FileNotFoundError("Dataset not found.")
-    with open("dataset/metadata.jsonl", "r", encoding="utf-8") as dataset:
-        documents = []
-        for item in dataset:
-            entry = json.loads(item)
+    documents = []
+    with open(DATASET_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+            entry = json.loads(line)
             content = (
                 f"Question: {entry['Question']}\nFinal answer: {entry['Final answer']}"
             )
@@ -71,58 +76,71 @@ def load_vector_store():
     return vector_store
 
 
-# Build graph function
-def build_graph(provider: str = "openai"):
-    """Build the graph"""
+def get_llm(provider: str):
+    """Get LLM instance based on provider."""
     if provider == "openai":
         if not os.environ.get("OPENAI_API_KEY"):
-            os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter API key for OpenAI: ")
-        llm = ChatOpenAI(model="gpt-4.1", temperature=0.2)
+            os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter OpenAI API key: ")
+        return ChatOpenAI(model="gpt-4.1", temperature=0)
     elif provider == "ollama":
-        llm = ChatOllama(model="llama3.2", temperature=0)
+        return ChatOllama(model="llama3.2", temperature=0)
     else:
-        raise ValueError("Invalid provider!")
+        raise ValueError("Unsupported provider: choose 'openai' or 'ollama'")
 
-    llm_with_tools = llm.bind_tools(tools)
+
+def load_system_prompt() -> SystemMessage:
+    """Load system prompt from file."""
+    if not os.path.exists(SYSTEM_PROMPT_PATH):
+        raise FileNotFoundError(f"System prompt not found at {SYSTEM_PROMPT_PATH}.")
+    with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
+        return SystemMessage(content=f.read())
+
+
+def build_graph(provider: str = "openai"):
+    """Build and compile the LangGraph agent."""
+    llm = get_llm(provider).bind_tools(TOOLS)
     vector_store = load_vector_store()
-    with open("prompts/system_prompt.txt", "r", encoding="utf-8") as f:
-        system_prompt = f.read()
-    sys_msg = SystemMessage(content=system_prompt)
+    system_msg = load_system_prompt()
 
-    # Node
-    def assistant(state: MessagesState):
-        """Assistant node"""
-        return {"messages": [llm_with_tools.invoke(state["messages"])]}
-
-    # Node
     def retriever(state: MessagesState):
-        """Retriever node"""
-        similar_questions = vector_store.similarity_search(
-            state["messages"][0].content, k=3
-        )
-        if similar_questions:
-            refs = "\n\n".join([doc.page_content for doc in similar_questions])
+        """Retrieve similar examples based on user query."""
+        query = state["messages"][0].content
+        similar = vector_store.similarity_search(query, k=3)
+        if similar:
+            refs = "\n\n".join(doc.page_content for doc in similar)
             example_msg = HumanMessage(content=f"Here are similar examples:\n\n{refs}")
-            return {"messages": [sys_msg] + state["messages"] + [example_msg]}
-        else:
-            return {"messages": [sys_msg] + state["messages"]}
+            return {"messages": [system_msg] + state["messages"] + [example_msg]}
+        return {"messages": [system_msg] + state["messages"]}
 
-    builder = StateGraph(MessagesState)
-    builder.add_node("retriever", retriever)
-    builder.add_node("assistant", assistant)
-    builder.add_node("tools", ToolNode(tools))
-    builder.add_edge(START, "retriever")
-    builder.add_edge("retriever", "assistant")
-    builder.add_conditional_edges("assistant", tools_condition)
-    builder.add_edge("tools", "assistant")
-    return builder.compile()
+    def assistant(state: MessagesState):
+        """Call LLM to generate next message."""
+        response = llm.invoke(state["messages"])
+        return {"messages": [response]}
+
+    # --- Build graph ---
+    graph = StateGraph(MessagesState)
+    graph.add_node("retriever", retriever)
+    graph.add_node("assistant", assistant)
+    graph.add_node("tools", ToolNode(TOOLS))
+
+    graph.add_edge(START, "retriever")
+    graph.add_edge("retriever", "assistant")
+    graph.add_conditional_edges("assistant", tools_condition)
+    graph.add_edge("tools", "assistant")
+
+    return graph.compile()
 
 
-# For local runs
+def run_agent(query: str, provider: str = "openai"):
+    """Run the agent on a given query."""
+    graph = build_graph(provider)
+    messages = [HumanMessage(content=query)]
+    result = graph.invoke({"messages": messages})
+    for msg in result["messages"]:
+        msg.pretty_print()
+
+
+# --- Run locally ---
 if __name__ == "__main__":
-    question = "Who is the current president of USA ?"
-    graph = build_graph(provider="openai")
-    messages = [HumanMessage(content=question)]
-    messages = graph.invoke({"messages": messages})
-    for m in messages["messages"]:
-        m.pretty_print()
+    user_query = input("Enter your question: ")
+    run_agent(user_query)

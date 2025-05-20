@@ -33,7 +33,7 @@ class BasicAgent:
                 final_answer.split("\n")[0].split(",")[0] if final_answer else ""
             )
             return final_answer
-        return "AGENT FORMAT ERROR"
+        return answer
 
 
 def run_and_submit_all(profile: gr.OAuthProfile | None):
@@ -62,7 +62,6 @@ def run_and_submit_all(profile: gr.OAuthProfile | None):
         return f"Error initializing agent: {e}", None
     # In the case of an app running as a hugging Face space, this link points toward your codebase ( usefull for others so please keep it public)
     agent_code = f"https://huggingface.co/spaces/{space_id}/tree/main"
-    print(agent_code)
 
     # 2. Fetch Questions
     print(f"Fetching questions from: {questions_url}")
@@ -97,7 +96,6 @@ def run_and_submit_all(profile: gr.OAuthProfile | None):
             continue
         try:
             submitted_answer = agent(question_text)
-            print(submitted_answer)
             answers_payload.append(
                 {"task_id": task_id, "submitted_answer": submitted_answer}
             )

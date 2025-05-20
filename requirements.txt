@@ -3,6 +3,7 @@ requests
 langchain
 langchain-community
 langchain_openai
+langchain-ollama
 langchain-core
 langchain-google-genai
 langchain-huggingface

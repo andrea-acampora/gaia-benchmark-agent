@@ -23,7 +23,7 @@ class BasicAgent:
         messages = [HumanMessage(content=question)]
         messages = self.graph.invoke({"messages": messages})
         answer = messages["messages"][-1].content
-        return answer[14:]
+        return answer[14:]  # Removing "Final Answer:" for GAIA benchmark submission
 
 
 def run_and_submit_all(profile: gr.OAuthProfile | None):
@@ -31,8 +31,7 @@ def run_and_submit_all(profile: gr.OAuthProfile | None):
     Fetches all questions, runs the BasicAgent on them, submits all answers,
     and displays the results.
     """
-    # --- Determine HF Space Runtime URL and Repo URL ---
-    space_id = os.getenv("SPACE_ID")  # Get the SPACE_ID for sending link to the code
+    space_id = os.getenv("SPACE_ID")
 
     if profile:
         username = f"{profile.username}"

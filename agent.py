@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.vectorstores import InMemoryVectorStore
 from langchain_core.documents import Document
+from langchain_ollama import ChatOllama
 
 import os
 import getpass
@@ -58,6 +59,8 @@ def build_graph(provider: str = "openai"):
         if not os.environ.get("OPENAI_API_KEY"):
             os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter API key for OpenAI: ")
         llm = ChatOpenAI(model="gpt-4.1", temperature=0.2)
+    elif provider == "ollama":
+        llm = ChatOllama(model="llama3.2", temperature=0)
     else:
         raise ValueError("Invalid provider!")
     llm_with_tools = llm.bind_tools(tools)
@@ -116,7 +119,7 @@ def build_graph(provider: str = "openai"):
 # For local runs
 if __name__ == "__main__":
     question = "When was a picture of St. Thomas Aquinas first added to the Wikipedia page on the Principle of double effect?"
-    graph = build_graph(provider="openai")
+    graph = build_graph(provider="ollama")
     messages = [HumanMessage(content=question)]
     messages = graph.invoke({"messages": messages})
     for m in messages["messages"]:

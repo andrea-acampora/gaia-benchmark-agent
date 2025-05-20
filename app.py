@@ -87,6 +87,7 @@ def run_and_submit_all(profile: gr.OAuthProfile | None):
             continue
         try:
             submitted_answer = agent(question_text)
+            print(submitted_answer)
             answers_payload.append(
                 {"task_id": task_id, "submitted_answer": submitted_answer}
             )
